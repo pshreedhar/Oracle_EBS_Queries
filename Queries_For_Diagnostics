@@ -1,0 +1,814 @@
+
+--1. Query to get GL_UNPOSTED Journal Summary
+
+select l.name, h.*  from
+(
+select
+ledger_id, je_source, je_category, currency_code, sum(RUNNING_TOTAL_DR) DR_TOTAL, sum(RUNNING_TOTAL_CR) CR_TOTAL, status 
+from gl_je_headers h
+where status <> 'P'
+and sysdate-h.date_created < 90
+group by ledger_id, je_source, je_category, currency_code, status
+) h, gl_ledgers l
+where 1=1 
+and l.ledger_id = h.ledger_id;
+
+--2. Query to get WF_SUMMARY Summary (ACTIVE, COMPLETE, PURGABLE, NAME, DISPLAY_NAME, PERSISTENCE_TYPE, PERSISTENCE_DAYS, ERROR, DEFER, SUSPEND)
+select  
+to_char(NUM_ACTIVE,'999,999,999,999') active,
+to_char(NUM_COMPLETE,'999,999,999,999') complete,
+to_char(NUM_PURGEABLE,'999,999,999,999') purgable,
+WIT.NAME,
+DISPLAY_NAME,
+PERSISTENCE_TYPE,
+PERSISTENCE_DAYS,
+to_char(NUM_ERROR,'999,999,999,999') error,
+to_char(NUM_DEFER,'999,999,999,999') defer,
+to_char(NUM_SUSPEND,'999,999,999,999') suspend
+from wf_item_types wit, wf_item_types_tl wtl
+where wit.name like ('%')
+AND wtl.name = wit.name
+AND wtl.language = userenv('LANG')
+AND wit.NUM_ACTIVE is not NULL
+AND wit.NUM_ACTIVE <>0
+--order by PERSISTENCE_TYPE, NUM_COMPLETE desc
+/
+
+--3. Query to get WF_PENDING Summary (BEGIN_DATE_YEAR, PENDING_SINCE_LAST_90_DAYS)
+ SELECT   TO_CHAR (wi.begin_date, 'YYYY') Begin_Date_Year, COUNT (wi.item_key) Pending_Since_Last_90_days
+    FROM wf_items wi, wf_item_types wit, wf_item_types_tl witt
+   WHERE wi.item_type = wit.NAME
+     AND wi.end_date IS NULL
+     AND wit.NAME = witt.NAME
+     AND witt.LANGUAGE = 'US'
+     AND wi.begin_date < SYSDATE - 90
+GROUP BY TO_CHAR (wi.begin_date, 'YYYY')
+/
+
+--4. Query to get WF_ORPHANED_NOTIF Detail (MESSAGE_TYPE, MESSAGE_NAME, NOOFPENDINGNOTIF)
+select WN.MESSAGE_TYPE, wn.MESSAGE_NAME, count(notification_id) NoOfPendingNotif
+from WF_NOTIFICATIONS WN
+where not exists (select NULL from WF_ITEM_ACTIVITY_STATUSES WIAS
+where WIAS.NOTIFICATION_ID = WN.GROUP_ID)
+and not exists (select NULL from WF_ITEM_ACTIVITY_STATUSES_H WIAS
+where WIAS.NOTIFICATION_ID = WN.GROUP_ID)
+group by wn.message_type, wn.MESSAGE_NAME
+/
+
+--5. Query to get WF_INVALID_OBJECTS Detail (MODULE, ITEM_TYPE, NAME, TYPE, FUNCTION)
+select substr(ap.item_type,1,2) MODULE, item_type,name,type,function from
+wf_activities_vl ap
+ where substr( function , 1, instr(function, '.')-1) in (select object_name from all_objects where status = 'INVALID') or function
+ in
+ (select object_name from all_objects where status = 'INVALID')
+/
+
+--6. Query to get WF_ACTIVITIES_STUCK Detail (PROCESS_ITEM_TYPE, ACTIVITY_NAME, ACTIVITY_STATUS, ACTIVITY_RESULT_CODE, NO_OF_ACTIVITIES_PENDING)
+ select *
+from (
+SELECT p.PROCESS_ITEM_TYPE, p.ACTIVITY_NAME, s.ACTIVITY_STATUS,
+s.ACTIVITY_RESULT_CODE, count(s.ITEM_KEY) No_Of_Activities_Pending
+FROM wf_item_activity_statuses s,wf_process_activities p
+WHERE p.instance_id = s.process_activity
+AND activity_status = 'ERROR'
+AND activity_result_code = '#STUCK'
+GROUP BY p.PROCESS_ITEM_TYPE, p.ACTIVITY_NAME, s.ACTIVITY_STATUS, s.ACTIVITY_RESULT_CODE
+ORDER BY p.PROCESS_ITEM_TYPE, count(s.ITEM_KEY) desc)
+/
+
+--7. Query to get   WEEKDAY_LOGIN Summary (LOGIN_DAY, TOTAL_LOGIN_COUNT, AVG_LOGIN_PER_DAY, AVG_MINS_USAGE, LOCATION_ID, LOCATON_NAME, DEPARTMENT)
+   SELECT   decode(TO_CHAR (fndl.start_time, 'D'),1,'Sunday',2,'Monday',3,'Tuesday',4,'Wednesday',5,'Thursday',6,'Friday',7,'Saturday') LOGIN_DAY,
+COUNT (*) TOTAL_LOGIN_COUNT, round(count(*)/NVL (365, 365),2) AVG_LOGIN_PER_DAY,
+         ROUND (AVG ((fndl.end_time - fndl.start_time) * 24 * 60), 2) AVG_MINS_USAGE,hla.location_id,hla.description as locaton_name, haou.NAME as Department
+    FROM hr.per_all_people_f papf,
+     hr.per_all_assignments_f paaf,
+     per_assignment_status_types past,
+     hr.hr_all_organization_units haou,
+     hr.per_person_types ppt,
+     fnd_logins fndl,
+     fnd_user fndu,
+     hr_locations_all hla
+   WHERE fndl.start_time >= SYSDATE - 365
+and papf.PERSON_ID = paaf.PERSON_ID
+and paaf.ORGANIZATION_ID = haou.ORGANIZATION_ID
+and papf.PERSON_TYPE_ID = ppt.PERSON_TYPE_ID
+and fndu.employee_id = paaf.person_id
+and hla.location_id = paaf.location_id
+and fndl.user_id = fndu.user_id
+and trunc(sysdate) between trunc(fndu.start_date) and NVL(fndu.end_date,to_date('31-DEC-4712'))                                        
+and trunc(sysdate) between papf.EFFECTIVE_START_DATE and papf.EFFECTIVE_END_DATE
+and trunc(sysdate) between paaf.EFFECTIVE_START_DATE and paaf.EFFECTIVE_END_DATE
+GROUP BY TO_CHAR (fndl.start_time, 'D'),hla.location_id,hla.description,haou.NAME
+/
+
+--8. Query to get   USERS_NOTLOGED Detail (USER_ID, EMPLOYEE_ID, USER_NAME)
+  select user_id,employee_id,user_name from fnd_user where
+trunc(sysdate) between trunc(start_date) and NVL(end_date,to_date('31-DEC-4712'))
+and (trunc(sysdate) - trunc(last_logon_date)) >= 1095
+/
+
+--9. Query to get TERMINATED_EMP Detail (Employee Status, ACTIVE_LOGIN_COUNT, LOCATION_ID, LOCATON_NAME, DEPARTMENT)
+  select ppt.USER_PERSON_TYPE EmployeeStatus,count(*) Active_login_count,hla.location_id,hla.description as locaton_name, haou.NAME as Department
+from hr.per_all_people_f papf,
+     hr.per_all_assignments_f paaf,
+     per_assignment_status_types past,
+     hr.hr_all_organization_units haou,
+     hr.per_person_types ppt,
+     hr.per_periods_of_service pps,
+     fnd_user fndu,
+     hr_locations_all hla      
+where papf.PERSON_ID = paaf.PERSON_ID
+and paaf.ORGANIZATION_ID = haou.ORGANIZATION_ID
+and papf.PERSON_TYPE_ID = ppt.PERSON_TYPE_ID
+and papf.PERSON_ID = pps.PERSON_ID  
+AND    paaf.assignment_type      = 'E'
+and fndu.employee_id = paaf.person_id
+and hla.location_id = paaf.location_id
+and pps.actual_termination_date BETWEEN paaf.effective_start_date
+                                        AND paaf.effective_end_date
+and trunc(sysdate) between trunc(fndu.start_date) and NVL(fndu.end_date,to_date('31-DEC-4712'))                                        
+and trunc(sysdate) between papf.EFFECTIVE_START_DATE and papf.EFFECTIVE_END_DATE
+group by  ppt.USER_PERSON_TYPE,hla.location_id,hla.description,haou.NAME
+/
+
+--10. Query to get   TABLE_SPACE Summary (TABLESPACE_NAME, TOTAL, USED, FREE, PCT, COLOR_CODE)
+   SELECT tbs.tablespace_name,
+  tot.bytes              / 1024 total,
+  tot.bytes              / 1024 -SUM(NVL(fre.bytes, 0)) / 1024 used,
+  SUM(NVL(fre.bytes, 0)) / 1024 free,
+  round((1-SUM(NVL(fre.bytes, 0)) / tot.bytes) *100) pct,
+  XX_SPACE_RANGE_OBJ((1-SUM(NVL(fre.bytes, 0)) / tot.bytes) *100) color_code
+FROM dba_free_space fre,
+  (SELECT tablespace_name,
+    SUM(bytes) bytes
+  FROM dba_data_files
+  GROUP BY tablespace_name
+  ) tot,
+  dba_tablespaces tbs
+WHERE tot.tablespace_name  = tbs.tablespace_name
+AND fre.tablespace_name(+) = tbs.tablespace_name
+GROUP BY tbs.tablespace_name,
+  tot.bytes / 1024,
+  tot.bytes
+/
+
+--11. Query to get   TABLE_SIZE Summary (TABLE_NAME, NUM_ROWS, OWNER, TABLESPACE_NAME, PCT_FREE, PCT_USED, COLOR_CODE)
+   SELECT   table_name, num_rows, owner, tablespace_name, pct_free, pct_used,
+         xx_space_range_obj (pct_used) color_code
+    FROM all_tables
+   WHERE num_rows > 0 AND table_name NOT LIKE '%$%'
+   --and pct_used is not null
+/
+
+--12. Query to get SQL_PERFORMANCE Summary (USERNAME, SID, OSUSER, SQL_ID, SQL_TEXT, SERIAL#, MACHINE, ELAPSED, REMAINING, PROGRESS_PCT)
+  select S.USERNAME, s.sid, s.osuser, t.sql_id, sql_text,
+s.serial#,
+s.machine,
+ROUND(sl.elapsed_seconds/60) || ':' ||
+MOD(sl.elapsed_seconds,60) elapsed,
+ROUND(sl.time_remaining/60) || ':' ||
+MOD(sl.time_remaining,60) remaining,
+ROUND(sl.sofar/sl.totalwork*100, 2) progress_pct
+from v$sqltext_with_newlines t,V$SESSION s,v$session_longops sl
+where t.address =s.sql_address
+and t.hash_value = s.sql_hash_value
+and  s.SID = sl.SID
+and s.serial# = sl.serial#
+and s.status = 'ACTIVE'
+and s.username <> 'SYSTEM'
+/
+
+--13. Query to get SOD_DESIG_WISE_RESP Summary (DESIGNATION, PER_COUNT, ICX_COUNT, FND_COUNT, OTA_COUNT, AP_COUNT, HXC_COUNT, AR_COUNT, GL_COUNT, PO_COUNT, PA_COUNT, ONT_COUNT, INV_COUNT, SYSADMIN_COUNT)
+select  pap.name designation
+,sum(decode( a.application_short_name, 'PER', 1, 0)) PER_COUNT
+,sum(decode( a.application_short_name, 'ICX', 1, 0)) ICX_COUNT
+,sum(decode( a.application_short_name, 'FND', 1, 0)) FND_COUNT
+,sum(decode( a.application_short_name, 'OTA', 1, 0)) OTA_COUNT
+,sum(decode( a.application_short_name, 'SQLAP', 1, 0)) AP_COUNT
+,sum(decode( a.application_short_name, 'HXC', 1, 0)) HXC_COUNT
+,sum(decode( a.application_short_name, 'AR', 1, 0)) AR_COUNT
+,sum(decode( a.application_short_name, 'SQLGL', 1, 0)) GL_COUNT
+,sum(decode( a.application_short_name, 'PO', 1, 0)) PO_COUNT
+,sum(decode( a.application_short_name, 'PA', 1, 0)) PA_COUNT
+,sum(decode( a.application_short_name, 'ONT', 1, 0)) ONT_COUNT
+,sum(decode( a.application_short_name, 'INV', 1, 0)) INV_COUNT
+,sum(decode( a.application_short_name, 'SYSADMIN', 1, 0)) SYSADMIN_COUNT
+from hr.per_all_people_f papf
+     ,hr.per_all_assignments_f  paaf
+     ,per_all_positions  pap
+     ,fnd_user  u     
+     ,fnd_user_resp_groups ug
+,fnd_responsibility  r1  
+     ,fnd_responsibility_tl  r  
+     ,hr.per_person_types ppt
+     ,fnd_application_vl a
+where papf.PERSON_ID = paaf.PERSON_ID
+and pap.position_id = paaf.position_id  
+and a.APPLICATION_ID = r.APPLICATION_ID
+and papf.PERSON_TYPE_ID = ppt.PERSON_TYPE_ID   
+AND paaf.assignment_type      = 'E'
+and ug.user_id = u.user_id
+and r.responsibility_id = ug.responsibility_id
+and r.responsibility_id = r1.responsibility_id
+and nvl(r1.end_date, sysdate) >= sysdate
+and u.employee_id = paaf.person_id
+and trunc(sysdate) between trunc(u.start_date) and NVL(u.end_date,to_date('31-DEC-4712'))                                        
+and trunc(sysdate) between papf.EFFECTIVE_START_DATE and papf.EFFECTIVE_END_DATE
+and trunc(sysdate) between paaf.EFFECTIVE_START_DATE and paaf.EFFECTIVE_END_DATE
+group by pap.name
+/
+
+--14. Query to get  RESP_ACTIVE_SUMM Summary (STATUS, PER_RESP_COUNT, ICX_RESP_COUNT, FND_RESP_COUNT, OTA_RESP_COUNT, AP_RESP_COUNT, HXC_RESP_COUNT, AR_RESP_COUNT, GL_RESP_COUNT, PO_RESP_COUNT, PA_RESP_COUNT, ONT_RESP_COUNT, INV_RESP_COUNT, SYSADMIN_RESP_COUNT)
+  select
+'1.Total Resp existing in EBS' Status
+, sum(PER_COUNT) PER_RESP_COUNT
+, sum(ICX_COUNT) ICX_RESP_COUNT
+, sum(FND_COUNT) FND_RESP_COUNT
+, sum(OTA_COUNT) OTA_RESP_COUNT
+, sum(AP_COUNT)  AP_RESP_COUNT
+, sum(HXC_COUNT) HXC_RESP_COUNT
+, sum(AR_COUNT)  AR_RESP_COUNT
+, sum(GL_COUNT)  GL_RESP_COUNT
+, sum(PO_COUNT)  PO_RESP_COUNT
+, sum(PA_COUNT)  PA_RESP_COUNT
+, sum(ONT_COUNT) ONT_RESP_COUNT
+,sum(INV_COUNT)   INV_RESP_COUNT
+, sum(SYSADMIN_COUNT) SYSADMIN_RESP_COUNT
+from (
+select  
+--a.application_short_name,
+sum(decode( a.application_short_name, 'PER', 1, 0)) PER_COUNT
+,sum(decode( a.application_short_name, 'ICX', 1, 0)) ICX_COUNT
+,sum(decode( a.application_short_name, 'FND', 1, 0)) FND_COUNT
+,sum(decode( a.application_short_name, 'OTA', 1, 0)) OTA_COUNT
+,sum(decode( a.application_short_name, 'SQLAP', 1, 0)) AP_COUNT
+,sum(decode( a.application_short_name, 'HXC', 1, 0)) HXC_COUNT
+,sum(decode( a.application_short_name, 'AR', 1, 0)) AR_COUNT
+,sum(decode( a.application_short_name, 'SQLGL', 1, 0)) GL_COUNT
+,sum(decode( a.application_short_name, 'PO', 1, 0)) PO_COUNT
+,sum(decode( a.application_short_name, 'PA', 1, 0)) PA_COUNT
+,sum(decode( a.application_short_name, 'ONT', 1, 0)) ONT_COUNT
+,sum(decode( a.application_short_name, 'INV', 1, 0)) INV_COUNT
+,sum(decode( a.application_short_name, 'SYSADMIN', 1, 0)) SYSADMIN_COUNT
+--,count(*) Active_login_count
+from fnd_user_resp_groups ug
+     ,fnd_responsibility_tl r  
+     , fnd_application_vl a
+--     fnd_user_resp
+where a.APPLICATION_ID = r.APPLICATION_ID
+and r.responsibility_id = ug.responsibility_id
+--group by a.application_short_name
+)
+union
+select
+'2.Total Resp Assiged' Status
+, sum(PER_COUNT) PER_RESP_COUNT
+, sum(ICX_COUNT) ICX_RESP_COUNT
+, sum(FND_COUNT) FND_RESP_COUNT
+, sum(OTA_COUNT) OTA_RESP_COUNT
+, sum(AP_COUNT)  AP_RESP_COUNT
+, sum(HXC_COUNT) HXC_RESP_COUNT
+, sum(AR_COUNT)  AR_RESP_COUNT
+, sum(GL_COUNT)  GL_RESP_COUNT
+, sum(PO_COUNT)  PO_RESP_COUNT
+, sum(PA_COUNT)  PA_RESP_COUNT
+, sum(ONT_COUNT) ONT_RESP_COUNT
+,sum(INV_COUNT)   INV_RESP_COUNT
+, sum(SYSADMIN_COUNT) SYSADMIN_RESP_COUNT
+from (
+select  
+--a.application_short_name,
+sum(decode( a.application_short_name, 'PER', 1, 0)) PER_COUNT
+,sum(decode( a.application_short_name, 'ICX', 1, 0)) ICX_COUNT
+,sum(decode( a.application_short_name, 'FND', 1, 0)) FND_COUNT
+,sum(decode( a.application_short_name, 'OTA', 1, 0)) OTA_COUNT
+,sum(decode( a.application_short_name, 'SQLAP', 1, 0)) AP_COUNT
+,sum(decode( a.application_short_name, 'HXC', 1, 0)) HXC_COUNT
+,sum(decode( a.application_short_name, 'AR', 1, 0)) AR_COUNT
+,sum(decode( a.application_short_name, 'SQLGL', 1, 0)) GL_COUNT
+,sum(decode( a.application_short_name, 'PO', 1, 0)) PO_COUNT
+,sum(decode( a.application_short_name, 'PA', 1, 0)) PA_COUNT
+,sum(decode( a.application_short_name, 'ONT', 1, 0)) ONT_COUNT
+,sum(decode( a.application_short_name, 'INV', 1, 0)) INV_COUNT
+,sum(decode( a.application_short_name, 'SYSADMIN', 1, 0)) SYSADMIN_COUNT
+--,count(*) Active_login_count
+from hr.per_all_people_f papf
+     ,hr.per_all_assignments_f paaf
+     ,per_all_positions pap
+       ,fnd_user fndu    
+        ,fnd_user_resp_groups ug
+,fnd_responsibility  r1       
+     ,fnd_responsibility_tl r  
+     , hr.per_person_types ppt
+     , fnd_application_vl a
+--     fnd_user_resp
+where papf.PERSON_ID = paaf.PERSON_ID
+and pap.position_id = paaf.position_id  
+and a.APPLICATION_ID = r.APPLICATION_ID
+and papf.PERSON_TYPE_ID = ppt.PERSON_TYPE_ID   
+AND paaf.assignment_type      = 'E'
+and ug.user_id = fndu.user_id
+and r.responsibility_id = ug.responsibility_id
+and r.responsibility_id = r1.responsibility_id
+and nvl(r1.end_date, sysdate) >= sysdate
+and fndu.employee_id = paaf.person_id
+and trunc(sysdate) between trunc(fndu.start_date) and NVL(fndu.end_date,to_date('31-DEC-4712'))                                        
+and trunc(sysdate) between papf.EFFECTIVE_START_DATE and papf.EFFECTIVE_END_DATE
+and trunc(sysdate) between paaf.EFFECTIVE_START_DATE and paaf.EFFECTIVE_END_DATE
+--group by a.application_short_name
+)
+/
+
+--15. Query to get   RA_INTF_ERROR Detail (OU, LEDGERNAME, INTERFACE_STATUS, MESSAGE_TEXT, INVALID_VALUE, BATCH_SOURCE_NAME, DESCRIPTION, CURRENCY_CODE, AMOUNT, TRX_DATE)
+   SELECT DISTINCT ou.NAME ou, l.NAME ledgername, il.interface_status, e.MESSAGE_TEXT, e.invalid_value, batch_source_name, il.description, il.currency_code, amount,il.trx_date
+FROM ra_interface_lines_all il,
+hr_operating_units ou,
+gl_ledgers l,
+ra_interface_errors_all e
+WHERE ou.organization_id = il.org_id
+AND l.ledger_id = il.set_of_books_id
+AND e.interface_line_id = il.interface_line_id
+AND ou.NAME NOT LIKE 'Vision Industries'
+AND NVL (il.interface_status, 'X') <> 'P'
+/
+
+--16. Query to get PO_INTF_ERROR Detail (OU, INTERFACE_SOURCE_CODE, PO_HEADER_ID, INTERFACE_LINE_ID, COLUMN_VALUE, ERROR_MESSAGE, CREATION_DATE)
+   SELECT distinct ou.NAME ou, pi.interface_source_code, pi.po_header_id, e.INTERFACE_LINE_ID,
+       COLUMN_VALUE, error_message,e.creation_date
+  FROM po_headers_interface pi,
+  po_interface_errors e, hr_operating_units ou
+ WHERE e.interface_header_id = pi.interface_header_id
+   AND ou.organization_id = pi.org_id
+/
+
+--17. Query to get OPEN_ITEMS Summary (ITEM_TYPE, SIXMONTHS, MONTHLY, DAILY, STATUS)
+select item_type, count(item_key) SixMonths,
+to_char(round(count(item_key)/6,0),'999,999,999,999') Monthly,
+to_char(round(count(item_key)/180,0),'999,999,999,999') Daily,
+decode(round(count(item_key)/180,0), 0, '#APP_IMAGES#TICK.png', '#APP_IMAGES#CROSS.png') Status
+from wf_items
+where begin_date > sysdate-180
+group by item_type
+/
+
+--18. Query to get   MTL_INTF_ERROR Detail (NAME, UNIQUE_ID, TABLE_NAME, COLUMN_NAME, MESSAGE_NAME, ERROR_MESSAGE, TRANSACTION_ID, CREATION_DATE)
+select u.name,m.unique_id,m.table_name,m.column_name,m.message_name,error_message,m.transaction_id,m.creation_date 
+from MTL_INTERFACE_ERRORS m,hr_operating_units u
+ where  u.organization_id = m.organization_id
+/
+
+--19. Query to get   MOST_RUN_PGMS Summary (PROGRAM, RUNCOUNT)
+  select program, count(request_id) RunCount
+from fnd_conc_req_summary_v
+group by program
+having count(request_id) > 5
+order by 2 desc
+
+/
+
+--20. Query to get   MOST_RUN_INTRFACE_PGMS Summary (PROGRAM, RUNCOUNT)
+  select program, count(request_id) RunCount
+from fnd_conc_req_summary_v
+where (program like '%Interface%' or program like '%Import%')  
+group by program
+having count(request_id) > 5
+order by 2 desc
+/
+
+--21. Query to get   MOST_ACCESSED_MODULES Summary (MODULE, COUNT)
+  SELECT module, count(apps_user) count  FROM
+(SELECT DISTINCT usr.user_name apps_user, apps.application_short_name module,
+apps_tl.application_name, to_char(l.start_time, 'MON-YYYY') login_time, frm.user_form_name
+FROM applsys.fnd_logins l, applsys.fnd_application apps, applsys.FND_APPLICATION_TL apps_tl,
+applsys.fnd_login_responsibilities lresp, applsys.fnd_login_resp_forms lform,
+applsys.fnd_responsibility resp, applsys.fnd_form_tl frm, applsys.fnd_user usr, v$process vproc, v$session s
+WHERE l.login_id = lresp.login_id (+)
+AND l.login_id = lform.login_id (+)
+AND apps.application_id (+) = resp.application_id
+AND apps.application_id = apps_tl.application_id
+AND l.user_id = usr.user_id
+AND lresp.responsibility_id = resp.responsibility_id (+)
+AND lresp.responsibility_id IS NOT NULL
+AND lresp.resp_appl_id = resp.application_id (+)
+AND lform.form_id = frm.form_id (+)
+AND lform.form_appl_id = frm.application_id (+)
+AND l.spid = s.process
+AND vproc.addr = s.paddr (+)
+) A
+WHERE application_name LIKE '%'
+group by module
+/
+
+--22. Query to get   MOST_ACCESSED_FORM Summary (USER_FORM_NAME, COUNT)
+  SELECT user_form_name, count(apps_user) count FROM
+(SELECT DISTINCT usr.user_name apps_user, apps.application_short_name module,
+apps_tl.application_name, to_char(l.start_time, 'MON-YYYY') login_time, frm.user_form_name
+FROM applsys.fnd_logins l, applsys.fnd_application apps, applsys.FND_APPLICATION_TL apps_tl,
+applsys.fnd_login_responsibilities lresp, applsys.fnd_login_resp_forms lform,
+applsys.fnd_responsibility resp, applsys.fnd_form_tl frm, applsys.fnd_user usr, v$process vproc, v$session s
+WHERE l.login_id = lresp.login_id (+)
+AND l.login_id = lform.login_id (+)
+AND apps.application_id (+) = resp.application_id
+AND apps.application_id = apps_tl.application_id
+AND l.user_id = usr.user_id
+AND lresp.responsibility_id = resp.responsibility_id (+)
+AND lresp.responsibility_id IS NOT NULL
+AND lresp.resp_appl_id = resp.application_id (+)
+AND lform.form_id = frm.form_id (+)
+AND lform.form_appl_id = frm.application_id (+)
+AND l.spid = s.process
+AND vproc.addr = s.paddr (+)
+) A
+WHERE application_name LIKE '%'
+group by user_form_name
+/
+
+--23. Query to get   LOGIN_LOGOUT_STAT Detail (LOGOUT_PROPER, ACCESS_COUNT, LOCATION_ID, LOCATION_NAME, DEPARTMENT)
+  select DECODE (NVL (TO_CHAR (fndl.end_time, 'DAY'), 'No'),
+                 'No', 'No',
+                 'Yes'
+                ) logout_proper,
+         COUNT (*) access_count,hla.location_id,hla.description as location_name, haou.NAME as Department
+from hr.per_all_people_f papf,
+     hr.per_all_assignments_f paaf,
+     per_assignment_status_types past,
+     hr.hr_all_organization_units haou,
+     hr.per_person_types ppt,
+     fnd_logins fndl,
+     fnd_user fndu,
+     hr_locations_all hla      
+where papf.PERSON_ID = paaf.PERSON_ID
+and paaf.ORGANIZATION_ID = haou.ORGANIZATION_ID
+and papf.PERSON_TYPE_ID = ppt.PERSON_TYPE_ID
+and fndu.employee_id = paaf.person_id
+and hla.location_id = paaf.location_id
+and fndl.user_id = fndu.user_id
+and trunc(sysdate) between trunc(fndu.start_date) and NVL(fndu.end_date,to_date('31-DEC-4712'))                                        
+and trunc(sysdate) between papf.EFFECTIVE_START_DATE and papf.EFFECTIVE_END_DATE
+and trunc(sysdate) between paaf.EFFECTIVE_START_DATE and paaf.EFFECTIVE_END_DATE
+and start_time >= SYSDATE - 365  
+group by  DECODE (NVL (TO_CHAR (fndl.end_time, 'DAY'), 'No'), 'No', 'No', 'Yes'),hla.location_id,hla.description,haou.NAME
+/
+
+--24. Query to get   LEAST_USED_PGMS Summary (PROGRAM, RUNCOUNT)
+   select program, count(request_id) RunCount
+from fnd_conc_req_summary_v
+group by program
+having count(request_id) < 20
+order by 2 asc
+/
+
+--25. Query to get   LARGE_OBJECTS Summary (SEGMENT_NAME, SEGMENT_TYPE, GB, TABLESPACE_NAME)
+  SELECT * FROM
+ (select SEGMENT_NAME, SEGMENT_TYPE, BYTES/1024/1024/1024 GB, TABLESPACE_NAME
+    from dba_segments order by 3 desc )
+WHERE ROWNUM <= 10
+/
+
+--26. Query to get   INVALID_OBJECTS Details (OWNER, REFERENCED_NAME, TYPE, REFERENCED_TYPE, DEPENDENT_OBJECTS_USED_BY, COLOR_CODE)
+  select owner,referenced_name,type, referenced_type, name dependent_objects_used_by,'#APP_IMAGES#red.png' color_code
+from    dba_dependencies
+where  referenced_name in (select object_name from all_objects where status = 'INVALID')
+/
+
+--27. Query to get  INVALID_EMAIL_ADRESS Details (USER_NAME, EMPLOYEE_ID, FND_EMAIL_ADDRESS, PAPF_EMAIL_ADDRESS, EMAIL_COMPARISION, FAILED_CONTACTS)
+select fnd.user_name,fnd.employee_id,fnd.email_address fnd_email_address,papf.email_address papf_email_address,
+decode(fnd.email_address,papf.email_address,'','Not Same') Email_comparision,
+decode(NVL(fnd.email_address,'0'),'0','Invalid Email Address') Failed_contacts
+from fnd_user fnd, per_all_people_f papf
+where fnd.employee_id = papf.person_id
+and trunc(sysdate) between trunc(papf.effective_start_date) and trunc(papf.effective_end_date)
+/
+
+--28. Query to get    GL_TIME_TO_POST Summary (LEDGERNAME, TIME_TO_POST_IN_HRS)
+  select name LedgerName, round(avg(time_to_post_in_hrs),2) time_to_post_in_hrs  from
+(
+select
+ledger_id, je_source, je_category, posted_date, default_effective_date, earliest_postable_date, (posted_date - earliest_postable_date) * 24 time_to_post_in_hrs
+from gl_je_headers h
+where status = 'P'
+and  default_effective_date > '01-JAN-2001'
+and sysdate-h.date_created < 30
+group by ledger_id, je_source, je_category, posted_date, default_effective_date, earliest_postable_date
+) h, gl_ledgers l
+where time_to_post_in_hrs > 3
+and l.ledger_id = h.ledger_id
+group by name
+/
+
+--29. Query to get  GL_INTF_ERROR Summary (LEDGERNAME, STATUS, USER_JE_SOURCE_NAME, USER_JE_CATEGORY_NAME, CURRENCY_CODE, ENTERED_DR, ENTERED_CR, STATUS_DESCRIPTION, WARNING_CODE, ACCOUNTING_DATE)
+  SELECT l.NAME ledgername, status, i.user_je_source_name,
+       user_je_category_name, i.currency_code, entered_dr, entered_cr,
+       status_description, warning_code,i.accounting_date
+  FROM gl_interface i, gl_ledgers l
+ WHERE l.ledger_id = i.ledger_id AND i.status NOT IN ('NEW', 'PROCESSED')
+/
+
+--30. Query to get    EXPIRED_RESP_FORM Summary (MODULE, FUNCTION_NAME, RESPONSIBILITY_NAME, END_DATE)
+  SELECT  SUBSTR (c.function_name, 1, 2) module,c.function_name, d.responsibility_name,d.end_date
+FROM fnd_menu_entries a,
+fnd_menu_entries_vl b,
+fnd_form_functions c,
+fnd_responsibility_vl d
+WHERE a.menu_id = b.menu_id
+AND a.function_id = b.function_id
+AND b.function_id = c.function_id
+AND a.menu_id = d.menu_id
+AND c.application_id = d.application_id
+and d.end_date < sysdate
+/
+
+--31. Query to get  DB_LOCKS Details (SID, SERIAL#, USERNAME, LOCK_TYPE, OSUSER, MACHINE, OWNER, OBJECT_NAME, Wait_Time)
+   SELECT s.sid, s. serial#, s.username, l.lock_type, s.osuser, s.machine,
+    o.owner, o.object_name, ROUND(w.seconds_in_wait/60, 2) Wait_Time                
+FROM
+     v$session s, dba_locks l, dba_objects o, v$session_wait  w
+WHERE   s.sid = l.session_id
+  AND l.lock_type IN ('DML','DDL','PL/SQL User Lock')
+  AND l.lock_id1 = o.object_id
+  AND l.session_id = w.sid
+/
+
+--32. Query to get    DBLINK details (DB_LINK, HOST)
+  SELECT db_link,host FROM dba_db_links
+/
+
+--33. Query to get    DATAFILE_SIZE Details (FILE_NAME, TOTAL_MB, USED_MB, FREE_SPACE_MB, PCT, COLOR_CODE)
+   SELECT SUBSTR (df.NAME, 1, 40) as file_name, df.bytes / 1024 / 1024 as total_mb,
+         ((df.bytes / 1024 / 1024) - NVL (SUM (dfs.bytes) / 1024 / 1024, 0))
+               as used_mb,
+         NVL (SUM (dfs.bytes) / 1024 / 1024, 0) as free_space_mb,
+         round((1 - NVL (SUM (dfs.bytes) / 1024 / 1024, 0) / (df.bytes / 1024 / 1024)) *100,2) as pct,
+        XX_SPACE_RANGE_OBJ((1 - NVL (SUM (dfs.bytes) / 1024 / 1024, 0) / (df.bytes / 1024 / 1024)) *100) color_code
+    FROM v$datafile df, dba_free_space dfs
+   WHERE df.file# = dfs.file_id(+)   
+GROUP BY dfs.file_id, df.NAME, df.file#, df.bytes
+/
+
+--34. Query to get  CUSTOM_INVALID_OBJECTS Details (OWNER, OBJECT_NAME, OBJECT_TYPE)
+  select owner,object_name,object_type from all_objects
+where    object_name like 'XX%'  
+and status = 'INVALID'
+/
+
+--35. Query to get    CONC_SUCCESS_RATE Summary (PROGRAM_NAME, SUCCESS_RATE)
+  select PROGRAM_NAME, success_rate
+from
+(
+select distinct user_concurrent_program_name program_name, trunc(decode (status_code, 'C', ( count(*) / (select count(*) from fnd_conc_req_summary_v where user_concurrent_program_name = a.user_concurrent_program_name  ))*100, null)) success_rate
+from fnd_conc_req_summary_v a
+where 1=1 --user_concurrent_program_name like '%Jour%Import%'
+and status_code = 'C'
+and concurrent_program_id IN (select process_id from xx_batch_process_monitoring)
+group by user_concurrent_program_name , status_code
+)
+where success_rate < 100
+/
+
+--36. Query to get  CONC_PROG_INVALID_PLSQL Details (APPLICATION_NAME, USER_CONCURRENT_PROGRAM_NAME, CONCURRENT_PROGRAM_NAME, EXECUTION_FILE_NAME, EXECUTION_METHOD, OBJECT_NAME, OBJECT_TYPE, STATUS)
+  SELECT a.application_name  , fct.user_concurrent_program_name, fcp.concurrent_program_name,
+       fe.execution_file_name, fl.meaning execution_method, o.object_name,
+       o.object_type, o.status
+  FROM fnd_concurrent_programs_tl fct,
+       fnd_concurrent_programs fcp,
+       fnd_executables fe,
+       fnd_lookups fl,
+       dba_objects o,
+       fnd_application_tl a
+ WHERE UPPER (fct.user_concurrent_program_name) LIKE '%'
+   AND fct.concurrent_program_id = fcp.concurrent_program_id
+   AND fe.executable_id = fcp.executable_id
+   AND fl.lookup_code = fe.execution_method_code
+   AND fl.lookup_type = 'CP_EXECUTION_METHOD_CODE'
+   AND fl.meaning LIKE '%/SQL%'
+   AND o.object_name =
+          SUBSTR (fe.execution_file_name,
+                  1,
+                  INSTR (fe.execution_file_name, '.') - 1
+                 )
+   and a.APPLICATION_ID = fcp.APPLICATION_ID
+   AND o.status <> 'VALID'
+   and fcp.ENABLED_FLAG = 'Y'
+/
+
+--37. Query to get AP_INTF_ERROR Detail (OU, INVOICE_ID, LINE_NUMBER, DESCRIPTION, INVOICE_CURRENCY_CODE, INVOICE_AMOUNT, INVOICE_DATE)
+SELECT ou.NAME ou, r.invoice_id, r.line_number, r.description,
+       i.invoice_currency_code, i.invoice_amount,i.invoice_date
+  FROM ap_interface_rejections_v r,
+       ap_invoices_interface i,
+       hr_operating_units ou
+ WHERE ou.organization_id = i.org_id
+   --AND l.ledger_id = il.set_of_books_id
+   AND i.invoice_id = r.invoice_id
+   AND NVL (i.status, 'X') <> 'PROCESSED'
+/
+
+--38. Query to get ACTIVE_USERS Summary (NO_OF_EMPLOYEES, LOCATION_ID, LOCATION_NAME, DEPARTMENT_NAME)
+
+ select count(*) No_of_Employees,hla.location_id,hla.description location_name ,haou.NAME department_name
+ FROM hr.per_all_people_f papf,
+     hr.per_all_assignments_f paaf,
+     per_assignment_status_types past,
+     hr.hr_all_organization_units haou,
+     hr.per_person_types ppt,      
+     fnd_user fndu,
+     hr_locations_all hla
+   WHERE papf.PERSON_ID = paaf.PERSON_ID
+and paaf.ORGANIZATION_ID = haou.ORGANIZATION_ID
+and papf.PERSON_TYPE_ID = ppt.PERSON_TYPE_ID
+and fndu.employee_id = paaf.person_id
+and hla.location_id = paaf.location_id
+and trunc(sysdate) between trunc(fndu.start_date) and NVL(fndu.end_date,to_date('31-DEC-4712'))                                        
+and trunc(sysdate) between papf.EFFECTIVE_START_DATE and papf.EFFECTIVE_END_DATE
+and trunc(sysdate) between paaf.EFFECTIVE_START_DATE and paaf.EFFECTIVE_END_DATE
+GROUP BY hla.location_id,hla.description,haou.NAME
+/
+
+-- 39. Query to get AP_DISCO_LOST Details
+SELECT ou_name, term_name, invoice_distribution_id, invoice_date, invoice_currency_code, payment_currency_code, check_date, discount_amount_taken, amount_applicable_to_discount, discount_lost, terms_date,
+       payment_delay_days, vendor_name, vendor_type, vendor_site, address,
+       city, country, po_date, po_number, po_type, qty_ordered, qty_cancalled,
+       item_description, unit_price, po_line_amount, invoice_type,
+       invoice_amount, invoice_number, amount_paid, amount,
+       cheque_number, payment_date
+  FROM (SELECT 
+  ou.NAME ou_name, b.invoice_distribution_id, 
+  t.NAME term_name, a.invoice_date, a.invoice_currency_code,  a.payment_currency_code,i.check_date, a.discount_amount_taken, a.amount_applicable_to_discount, h.discount_lost,
+               terms_date, i.check_date - terms_date payment_delay_days,
+               e.vendor_name vendor_name,
+               UPPER (e.vendor_type_lookup_code) vendor_type,
+               f.vendor_site_code vendor_site, f.address_line1 address,
+               f.city city, f.country country,
+               TO_CHAR (TRUNC (d.creation_date)) po_date,
+               d.segment1 po_number, d.type_lookup_code po_type,
+               c.quantity_ordered qty_ordered,
+               c.quantity_cancelled qty_cancalled,
+               g.item_description item_description, g.unit_price unit_price,
+                 (NVL (c.quantity_ordered, 0) - NVL (c.quantity_cancelled, 0)
+                 )
+               * NVL (g.unit_price, 0) po_line_amount,
+               a.invoice_type_lookup_code invoice_type,
+               a.invoice_amount invoice_amount,
+                                               --TO_CHAR (TRUNC (A.INVOICE_DATE)) INVOICE_DATE,
+                                               a.invoice_num invoice_number,
+               a.amount_paid, h.amount, i.check_number cheque_number,
+               TO_CHAR (TRUNC (i.check_date)) payment_date     
+          FROM ap.ap_invoices_all a,
+               ap_terms t,
+               ap.ap_invoice_distributions_all b,
+               po.po_distributions_all c,
+               po.po_headers_all d,
+               po_vendors e,
+               po_vendor_sites_all f,
+               po.po_lines_all g,
+               ap.ap_invoice_payments_all h,
+               ap.ap_checks_all i,
+               hr_operating_units ou
+         WHERE a.invoice_id = b.invoice_id
+           AND t.term_id = a.terms_id
+           AND b.po_distribution_id = c.po_distribution_id(+)
+           AND c.po_header_id = d.po_header_id(+)
+           AND e.vendor_id(+) = d.vendor_id
+           AND f.vendor_site_id(+) = d.vendor_site_id
+           AND d.po_header_id = g.po_header_id
+           AND c.po_line_id = g.po_line_id
+           AND a.invoice_id = h.invoice_id
+           AND a.invoice_type_lookup_code NOT LIKE 'CREDIT'
+           AND ou.organization_id = c.org_id
+           --and a.org_id = d.org_id
+           AND h.check_id = i.check_id
+           AND f.vendor_site_id = i.vendor_site_id
+           --and a.discount_amount_taken > 10
+           and discount_lost > 0
+           --AND C.PO_HEADER_ID IS NOT NULL
+           --and NVL (C.QUANTITY_CANCELLED, 0) > 0
+           --AND A.PAYMENT_STATUS_FLAG = 'N'
+           AND d.type_lookup_code != 'BLANKET'
+           --AND (SYSDATE - check_date) < 600) 
+           and  (i.check_date - terms_date < 91 and (i.check_date - terms_date) > 0)
+)  
+/
+
+--40. Query to get OM_CANCELLED_STAT
+
+SELECT ou.NAME ou_name, l.NAME ledgername, ooh.order_number, ot.name order_type, ool.ordered_item,
+       TRUNC (ooh.ordered_date) ordered_date,
+       TRUNC (ool.promise_date) promise_date, raa.country, raa.STATE, 
+       rac.customer_name, ool.CANCELLED_QUANTITY, 
+       round(ool.UNIT_COST) unit_cost1, ool.ORDERED_QUANTITY, ooh.TRANSACTIONAL_CURR_CODE, 
+       round(nvl(ool.UNIT_COST,0)) * ool.CANCELLED_QUANTITY total_amount    
+  FROM gl_ledgers l,
+       hr_operating_units ou,
+       OE_TRANSACTION_TYPES_TL ot,
+       oe_order_headers_all ooh,
+       oe_order_lines_all ool,
+       ra_site_uses_all rsu,
+       ra_addresses_all raa,
+       ra_customers rac,
+       fnd_territories_vl rat
+ WHERE 1 = 1
+   AND ooh.header_id = ool.header_id
+   AND ooh.ship_to_org_id = rsu.site_use_id
+   AND rsu.address_id = raa.address_id
+      AND raa.country = rat.territory_code
+   AND raa.customer_id = rac.customer_id
+   and ot.transaction_type_id = ooh.ORDER_TYPE_ID
+   AND l.ledger_id = ou.set_of_books_id
+   AND ou.organization_id = ooh.org_id
+   AND ooh.flow_status_code LIKE 'CANCEL%'
+   
+   
+-- 41. Query to get PO_CANCELLED_STAT
+  
+SELECT l.NAME ledgername, ou.NAME, pv.vendor_name, pha.segment1,
+       type_lookup_code, pll.item_description, pha.currency_code,
+       pll.quantity, pll.unit_price,
+       pll.quantity * pll.unit_price total_price,
+       TRUNC (SYSDATE - pll.cancel_date) days_old
+  FROM gl_ledgers l,
+       hr_operating_units ou,
+       po_vendors pv,
+       po.po_headers_all pha,
+       po_lines_all pll
+ WHERE 1 = 1
+   AND NVL (approved_flag, 'N') = 'Y'
+   AND NVL (pll.cancel_flag, 'N') = 'Y'
+   AND pv.vendor_id = pha.vendor_id
+   AND l.ledger_id = ou.set_of_books_id
+   AND pll.po_header_id = pha.po_header_id
+   AND pll.org_id = pha.org_id
+   AND ou.organization_id = pha.org_id;
+   
+-- 42. Query to get unapplied AR_RECEIPTS_STAT
+select * from 
+(
+SELECT   l.name, rc.customer_name, acr.currency_code, NVL (SUM (DECODE (
+                         ara.STATUS,
+                         'ACC', amount_applied,
+                         0
+                       )), 0) on_acc,
+                   NVL (SUM (DECODE (
+                         ara.STATUS,
+                         'UNAPP', amount_applied,
+                         0
+                       )), 0) un_app
+              FROM                    gl_ledgers l , ra_customers rc 
+              ,ar_receivable_applications_all ara,
+                   ar_cash_receipts_all acr
+             WHERE ara.cash_receipt_id = acr.cash_receipt_id
+               AND ARA.STATUS IN ( 'ACC', 'UNAPP' )                  
+               AND ara.confirmed_flag IS NULL
+                and rc.customer_id = acr.pay_from_customer
+               and l.ledger_id = acr.set_of_books_id
+          GROUP BY l.name, acr.currency_code, rc.customer_name
+)
+where un_app+on_acc <> 0
+
+--43. Query to get period open delays GL_PERIOD_OPEN_DELAY
+SELECT   application_name, NAME ledgername,
+         MAX (conc_period_name) actual_period_open,
+         MAX (actual_req_date) actual_period_open_date,
+         start_date period_start_date, closing_status,
+         (MAX (TRUNC (actual_req_date)) - start_date) delay_open_days
+    FROM (SELECT application_name, l.NAME,
+                 SUBSTR (argument_text,
+                         INSTR (argument_text, ',', 1, 6) + 2,
+                         LENGTH (argument_text)
+                        ) conc_period_name,
+                 TRUNC (c.actual_completion_date) actual_req_date,
+                 s.start_date, s.closing_status
+            FROM fnd_conc_req_summary_v c,
+                 gl_period_statuses s,
+                 fnd_application_tl a,
+                 gl_ledgers l
+           WHERE s.period_name =
+                    SUBSTR (argument_text,
+                            INSTR (argument_text, ',', 1, 6) + 2,
+                            LENGTH (argument_text)
+                           )
+             AND s.application_id = a.application_id
+             AND l.ledger_id = s.ledger_id
+             AND closing_status = 'O'
+             AND c.program LIKE 'Open Period') a
+   WHERE (TRUNC (actual_req_date) - start_date) > 0
+GROUP BY application_name, start_date, closing_status, NAME
+ORDER BY application_name, NAME, start_date DESC
+
+-- 44. Function returns color code XX_SPACE_RANGE_OBJ used by DB health
+
+CREATE OR REPLACE FUNCTION XX_SPACE_RANGE_OBJ(p_percentage  IN NUMBER)
+                  RETURN VARCHAR
+IS
+  v_color    VARCHAR2(10);
+BEGIN
+ 
+IF round(p_percentage) >= 80 and round(p_percentage) <= 90 THEN
+        v_color := 'Yellow';
+ELSIF round(p_percentage) > 90 THEN
+        v_color := 'Red';
+END IF;
+  Return v_color;
+EXCEPTION
+  When NO_DATA_FOUND Then Return '';
+END;
+/
