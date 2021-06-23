@@ -1,0 +1,1356 @@
+----- Cost of goods
+SELECT a.name "Company Name",
+  a.ledger_name "Ledger Name" ,
+  a.period_year "Current Year",
+  b.period_year "Prior_Year",
+  a.quarter "Quarter",
+  (a.current_cgs_amount) "Current CGS Amount",
+  (b.prior_cgs_amount) "Prior CGS Amount",
+  ROUND((a.current_cgs_amount-b.prior_cgs_amount)/b.prior_cgs_amount,2)*100 "Change"
+FROM
+  (SELECT NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_cgs_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+   -- GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+ AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+  AND ( bal.CURRENCY_CODE       = gl.currency_code )
+    --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND segment3 LIKE '5%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) a,
+  (SELECT NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_cgs_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+ AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+  AND ( bal.CURRENCY_CODE       = gl.currency_code )
+    --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND segment3 LIKE '5%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  )b
+WHERE a.name     =b.name
+AND a.ledger_name=b.ledger_name
+AND a.quarter    =b.quarter
+ORDER BY 5; 
+
+----------- Expenses
+SELECT a.name "Company Name",
+  a.ledger_name "Ledger Name" ,
+  a.period_year "Current Year",
+  b.period_year "Prior_Year",
+  a.quarter "Quarter",
+  (a.current_Expense_Amount) "Current Expense Amount",
+  (b.prior_Expense_Amount) "Prior Expense Amount",
+  ROUND((a.current_Expense_amount-b.prior_Expense_amount)/b.prior_Expense_amount,2)*100 "Change"
+FROM
+  (SELECT
+    NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+   bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_Expense_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,  
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID     = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+   AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID       = gl.CHART_OF_ACCOUNTS_ID 
+  AND ( bal.CURRENCY_CODE           = gl.currency_code)
+  --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND ( (NVL(SEGMENT3,'')          >= '6001'
+  AND NVL(SEGMENT3,'')             <= '7230')
+  OR (NVL(SEGMENT3,'')             >= '7300'
+  AND NVL(SEGMENT3,'')             <= '7360')
+  OR (NVL(SEGMENT3,'')             >= '7410'
+  AND NVL(SEGMENT3,'')             <= '7998'))
+  AND ( (NVL(SEGMENT2,'')          >= '0'
+  AND NVL(SEGMENT2,'')             <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY
+    GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) a,
+  (
+  (SELECT 
+    NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_Expense_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID     = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+   AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID       = gl.CHART_OF_ACCOUNTS_ID 
+  AND ( bal.CURRENCY_CODE           = gl.currency_code )
+  --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND ( (NVL(SEGMENT3,'')          >= '6001'
+  AND NVL(SEGMENT3,'')             <= '7230')
+  OR (NVL(SEGMENT3,'')             >= '7300'
+  AND NVL(SEGMENT3,'')             <= '7360')
+  OR (NVL(SEGMENT3,'')             >= '7410'
+  AND NVL(SEGMENT3,'')             <= '7998'))
+  AND ( (NVL(SEGMENT2,'')          >= '0'
+  AND NVL(SEGMENT2,'')             <= '850') )
+  AND ((( (NVL(bal.period_year,'')  = :Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A' )
+  OR ( (bal.ACTUAL_FLAG           = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))))) ) )
+  GROUP BY 
+    GL.name ,
+    gl.SHORT_NAME,
+  bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  )) b
+WHERE a.name     =b.name
+AND a.ledger_name=b.ledger_name
+AND a.quarter    =b.quarter
+ORDER BY 5; 
+
+---------- Income Statement
+SELECT name,
+  ledger_name "Ledger Name",
+  Current_Period_year "Current Period Name",
+  Prior_Period_year "Prior Period Name",quarter ,
+  current_gross_income "Current Gross Income",
+  prior_gross_income "Prior Gross Income",
+  ROUND( (current_gross_income-prior_gross_income)/prior_gross_income,2)*100 "Change"
+FROM
+  (SELECT Current_CGS_view.name Name,
+    Current_CGS_view.ledger_name ,Current_CGS_view.quarter,
+    Current_CGS_view.period_year Current_Period_Year,
+    Prior_CGS_view.period_year Prior_Period_year,
+    Current_CGS_view.current_cgs_amount "Current CGS Amount",
+    Prior_CGS_view.prior_cgs_amount "Prior CGS Amount",
+    (Current_Revenue_view.current_revenue_amount-Current_CGS_view.current_cgs_amount) Current_Gross_income,
+    (Prior_Revenue_view.prior_revenue_amount  - Prior_CGS_view.prior_cgs_amount) Prior_Gross_income
+  FROM
+  (SELECT NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_cgs_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+   -- GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+  AND ( bal.CURRENCY_CODE       = gl.currency_code )
+    --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND segment3 LIKE '5%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) Current_CGS_view,
+  (SELECT NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_cgs_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+  AND ( bal.CURRENCY_CODE       = gl.currency_code )
+    --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND segment3 LIKE '5%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  )Prior_CGS_view,
+    (SELECT bal.period_year ,
+    NVL(gl.SHORT_NAME, '') Name,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    GL.NAME ledger_name,
+    SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) current_Revenue_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,
+    gl_sets_of_books gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name      =gp.period_set_name
+  AND gl.accounted_period_type=gp.period_type
+  AND gp.period_name          =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID = gl.CHART_OF_ACCOUNTS_ID --101
+  AND ( bal.CURRENCY_CODE     = gl.currency_code)       --'USD' )
+    -- AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='R'
+  AND segment3 LIKE '4%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  =:Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) Current_Revenue_view,
+  (SELECT bal.period_year ,
+    NVL(gl.SHORT_NAME, '') Name,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    GL.NAME ledger_name,
+    SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) prior_Revenue_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,
+    gl_sets_of_books gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name      =gp.period_set_name
+  AND gl.accounted_period_type=gp.period_type
+  AND gp.period_name          =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID = gl.CHART_OF_ACCOUNTS_ID --101
+  AND ( bal.CURRENCY_CODE     = gl.currency_code)       --'USD' )
+    -- AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='R'
+  AND segment3 LIKE '4%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  =:Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) Prior_Revenue_view
+  WHERE Current_CGS_view.name     =Prior_CGS_view.name
+  AND Current_Revenue_view.name       =Prior_Revenue_view.name
+  AND Current_CGS_view.ledger_name=Prior_CGS_view.ledger_name
+  AND Current_Revenue_view.name       =Current_CGS_view.name
+  and Current_CGS_view.quarter=Prior_CGS_view.quarter
+  and Current_Revenue_view.quarter=Prior_Revenue_view.quarter
+  and Current_CGS_view.quarter=Current_Revenue_view.quarter
+  AND Current_CGS_view.ledger_name=Current_Revenue_view.ledger_name
+  AND Current_Revenue_view.ledger_name=Prior_Revenue_view.ledger_name
+  );
+
+---------- Margin
+
+SELECT name,
+  ledger_name "Ledger Name",
+  Current_Period_year "Current Period Year",
+  Prior_Period_year "Prior Period Year",
+  quarter "Quarter",
+  current_gross_margin "Current Gross Margin",
+  prior_gross_margin "Prior Gross Margin",
+  ROUND( (current_gross_margin-prior_gross_margin)/prior_gross_margin,2)*100 "Change"
+FROM
+  (SELECT a.name Name,
+    a.ledger_name ,
+    a.quarter,
+    a.period_year Current_Period_year,
+    b.period_year Prior_Period_year,
+    a.current_cgs_amount "Current CGS Amount",
+    b.prior_cgs_amount "Prior CGS Amount",
+    c.current_revenue_amount,
+    d.prior_revenue_amount,
+    ROUND((c.current_revenue_amount-a.current_cgs_amount)/c.current_revenue_amount,2) * 100 Current_Gross_Margin,
+    ROUND((d.prior_revenue_amount  - b.prior_cgs_amount)/d.prior_revenue_amount,2) *100 Prior_Gross_Margin
+  FROM
+    (SELECT NVL(gl.SHORT_NAME, '') Name,
+      GL.NAME ledger_name,
+      bal.PERIOD_year period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_cgs_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,
+      gl_sets_of_books gl,
+      -- GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+    AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+    AND ( bal.CURRENCY_CODE       = gl.currency_code )
+      --AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='E'
+    AND segment3 LIKE '5%'
+    AND ( (NVL(SEGMENT2,'')        >= '0'
+    AND NVL(SEGMENT2,'')           <= '850') )
+    AND ( (NVL(bal.period_year,'')  = :Current_Year
+    AND ( (bal.ACTUAL_FLAG          = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.PERIOD_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) a,
+    (SELECT NVL(gl.SHORT_NAME, '') Name,
+      GL.NAME ledger_name,
+      bal.PERIOD_year period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_cgs_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,
+      gl_sets_of_books gl,
+      --GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+    AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+    AND ( bal.CURRENCY_CODE       = gl.currency_code )
+      --AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='E'
+    AND segment3 LIKE '5%'
+    AND ( (NVL(SEGMENT2,'')        >= '0'
+    AND NVL(SEGMENT2,'')           <= '850') )
+    AND ( (NVL(bal.period_year,'')  = :Current_Year-1
+    AND ( (bal.ACTUAL_FLAG          = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.PERIOD_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    )b,
+    (SELECT bal.period_year ,
+      NVL(gl.SHORT_NAME, '') Name,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      GL.NAME ledger_name,
+      SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) current_Revenue_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+--      GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+   AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID --101
+    AND ( bal.CURRENCY_CODE       = gl.currency_code)       --'USD' )
+      -- AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='R'
+    AND segment3 LIKE '4%'
+    AND ( (NVL(SEGMENT2,'')        >= '0'
+    AND NVL(SEGMENT2,'')           <= '850') )
+    AND ( (NVL(bal.period_year,'')  =:Current_Year
+    AND ( (bal.ACTUAL_FLAG          = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) c,
+    (SELECT bal.period_year ,
+      NVL(gl.SHORT_NAME, '') Name,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      GL.NAME ledger_name,
+      SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) prior_Revenue_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+--      GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+   AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID --101
+    AND ( bal.CURRENCY_CODE       = gl.currency_code)       --'USD' )
+      -- AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='R'
+    AND segment3 LIKE '4%'
+    AND ( (NVL(SEGMENT2,'')        >= '0'
+    AND NVL(SEGMENT2,'')           <= '850') )
+    AND ( (NVL(bal.period_year,'')  =:Current_Year-1
+    AND ( (bal.ACTUAL_FLAG          = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) d
+  WHERE a.name     =b.name
+  AND c.name       =d.name
+  AND a.ledger_name=b.ledger_name
+  AND c.name       =a.name
+  AND a.quarter    =b.quarter
+  AND c.quarter    =d.quarter
+  AND a.quarter    =c.quarter
+  AND a.ledger_name=c.ledger_name
+  AND c.ledger_name=d.ledger_name
+  );
+
+---------- Operating Income
+SELECT revenue.name "Company Name",
+  revenue.ledger_name "Ledger Name",
+  revenue.current_period_year "Current Period Year" ,
+  revenue.prior_period_year "Prior Period Year",
+    revenue.quarter,
+  (NVL(Current_Revenue_Amount,0)-NVL(Current_CGS_Amount,0)-NVL(current_Expense_Amount,0)-NVL(current_dep_Amount,0))"Current Operating Income",
+  (NVL(Prior_Revenue_Amount,0)  -NVL(prior_CGS_Amount,0)-NVL(prior_Expense_Amount,0)-NVL(prior_dep_Amount,0)) "Prior Operating Income"
+FROM
+  (SELECT a.name ,
+    a.ledger_name ,
+    a.period_year Current_Period_year,
+    b.period_year Prior_Period_year,
+    a.quarter,
+    a.current_revenue_amount ,
+    b.prior_revenue_amount,
+    ROUND((a.current_revenue_amount-b.prior_revenue_amount)/b.prior_revenue_amount,2)*100 Change
+  FROM
+    (SELECT bal.period_year ,
+      NVL(gl.SHORT_NAME, '') Name,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      GL.NAME ledger_name,
+      SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) current_Revenue_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+--      GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+    AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID --101
+    AND ( bal.CURRENCY_CODE       = gl.currency_code)       --'USD' )
+      -- AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='R'
+    AND segment3 LIKE '4%'
+    AND ( (NVL(SEGMENT2,'')        >= '0'
+    AND NVL(SEGMENT2,'')           <= '850') )
+    AND ( (NVL(bal.period_year,'')  =:Current_Year
+    AND ( (bal.ACTUAL_FLAG          = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) a,
+    (SELECT bal.period_year ,
+      NVL(gl.SHORT_NAME, '') Name,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      GL.NAME ledger_name,
+      SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) prior_Revenue_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+--      GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+    AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID --101
+    AND ( bal.CURRENCY_CODE       = gl.currency_code)       --'USD' )
+      -- AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='R'
+    AND segment3 LIKE '4%'
+    AND ( (NVL(SEGMENT2,'')        >= '0'
+    AND NVL(SEGMENT2,'')           <= '850') )
+    AND ( (NVL(bal.period_year,'')  =:Current_Year-1
+    AND ( (bal.ACTUAL_FLAG          = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) b
+  WHERE a.name     =b.name
+  AND a.ledger_name=b.ledger_name
+  and a.quarter=b.quarter
+  ) revenue,
+  (SELECT a.name ,
+    a.ledger_name ,
+    a.period_year Current_Period_year,
+    a.quarter,
+    b.period_year Prior_Period_year,
+    a.current_cgs_amount,
+    b.prior_cgs_amount,
+    ROUND((a.current_cgs_amount-b.prior_cgs_amount)/b.prior_cgs_amount,2)*100 Change
+  FROM
+    (SELECT NVL(gl.SHORT_NAME, '') Name,
+      GL.NAME ledger_name,
+      bal.PERIOD_year period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_cgs_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,
+      gl_sets_of_books gl,
+      -- GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+    AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+    AND ( bal.CURRENCY_CODE       = gl.currency_code )
+      --AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='E'
+    AND segment3 LIKE '5%'
+    AND ( (NVL(SEGMENT2,'')        >= '0'
+    AND NVL(SEGMENT2,'')           <= '850') )
+    AND ( (NVL(bal.period_year,'')  = :Current_Year
+    AND ( (bal.ACTUAL_FLAG          = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.PERIOD_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) a,
+    (SELECT NVL(gl.SHORT_NAME, '') Name,
+      GL.NAME ledger_name,
+      bal.PERIOD_year period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_cgs_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,
+      gl_sets_of_books gl,
+      --GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+   AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+    AND ( bal.CURRENCY_CODE       = gl.currency_code )
+      --AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='E'
+    AND segment3 LIKE '5%'
+    AND ( (NVL(SEGMENT2,'')        >= '0'
+    AND NVL(SEGMENT2,'')           <= '850') )
+    AND ( (NVL(bal.period_year,'')  = :Current_Year-1
+    AND ( (bal.ACTUAL_FLAG          = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.PERIOD_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    )b
+  WHERE a.name     =b.name
+  AND a.ledger_name=b.ledger_name
+  and a.quarter=b.quarter
+  ) cgs,
+  (SELECT a.name ,
+    a.ledger_name ,
+    a.quarter,
+    a.period_year Current_Period_year,
+    b.period_year Prior_Period_year,
+    a.current_Expense_Amount,
+    b.prior_expense_amount ,
+    ROUND((a.current_Expense_Amount-b.prior_expense_amount)/b.prior_expense_amount,2)*100 Change
+  FROM
+    (SELECT NVL(gl.SHORT_NAME, '') Name,
+      GL.NAME ledger_name,
+      bal.PERIOD_year period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_Expense_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,
+      gl_sets_of_books gl,
+      --GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+    AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+    AND ( bal.CURRENCY_CODE       = gl.currency_code)
+      --AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='E'
+    AND ( (NVL(SEGMENT3,'')          >= '6001'
+    AND NVL(SEGMENT3,'')             <= '7230')
+    OR (NVL(SEGMENT3,'')             >= '7300'
+    AND NVL(SEGMENT3,'')             <= '7360')
+    OR (NVL(SEGMENT3,'')             >= '7410'
+    AND NVL(SEGMENT3,'')             <= '7998'))
+    AND ( (NVL(SEGMENT2,'')          >= '0'
+    AND NVL(SEGMENT2,'')             <= '850') )
+    AND ( (NVL(bal.period_year,'')    = :Current_Year
+    AND ( (bal.ACTUAL_FLAG            = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0)   != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)     != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.PERIOD_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) a,
+        (SELECT NVL(gl.SHORT_NAME, '') Name,
+      GL.NAME ledger_name,
+      bal.PERIOD_year period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_Expense_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,
+      gl_sets_of_books gl,
+      --GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+    AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+    AND ( bal.CURRENCY_CODE       = gl.currency_code )
+      --AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='E'
+    AND ( (NVL(SEGMENT3,'')          >= '6001'
+    AND NVL(SEGMENT3,'')             <= '7230')
+    OR (NVL(SEGMENT3,'')             >= '7300'
+    AND NVL(SEGMENT3,'')             <= '7360')
+    OR (NVL(SEGMENT3,'')             >= '7410'
+    AND NVL(SEGMENT3,'')             <= '7998'))
+    AND ( (NVL(SEGMENT2,'')          >= '0'
+    AND NVL(SEGMENT2,'')             <= '850') )
+    AND ((( (NVL(bal.period_year,'')  = :Current_Year-1
+    AND ( (bal.ACTUAL_FLAG            = 'A' )
+    OR ( (bal.ACTUAL_FLAG             = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0)   != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)     != 0))))))) ) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.PERIOD_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) b
+  WHERE a.name     =b.name
+  AND a.ledger_name=b.ledger_name
+  and a.quarter=b.quarter
+  ) opexp,
+ (SELECT a.name,
+  a.ledger_name ,
+  a.period_year ,
+  b.period_year,
+  a.quarter ,
+  (a.current_dep_Amount) ,
+  (b.prior_dep_Amount),
+  ROUND((a.current_dep_Amount-b.prior_dep_Amount)/b.prior_dep_Amount,2)*100 "Change"
+FROM
+  (SELECT
+    NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+   bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_dep_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,  
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID     = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+   AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID       = gl.CHART_OF_ACCOUNTS_ID 
+  AND ( bal.CURRENCY_CODE           = gl.currency_code)
+  --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND (NVL(SEGMENT3,'')         like '73%')
+  AND ( (NVL(SEGMENT2,'')          >= '0'
+  AND NVL(SEGMENT2,'')             <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY
+    GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) a,
+  (
+  (SELECT 
+    NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_dep_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID     = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+   AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID       = gl.CHART_OF_ACCOUNTS_ID 
+  AND ( bal.CURRENCY_CODE           = gl.currency_code )
+  --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+ AND (NVL(SEGMENT3,'')         like '73%')
+  AND ( (NVL(SEGMENT2,'')          >= '0'
+  AND NVL(SEGMENT2,'')             <= '850') )
+  AND ((( (NVL(bal.period_year,'')  = :Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A' )
+  OR ( (bal.ACTUAL_FLAG           = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))))) ) )
+  GROUP BY 
+    GL.name ,
+    gl.SHORT_NAME,
+  bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  )) b
+    WHERE a.name     =b.name
+    AND a.ledger_name=b.ledger_name
+    and a.quarter=b.quarter
+    ) depreciation
+  WHERE revenue.name     =depreciation.name(+)
+  AND revenue.ledger_name=depreciation.ledger_name(+)
+  AND revenue.quarter    =depreciation.quarter
+  AND cgs.quarter        =opexp.quarter
+  AND cgs.quarter        =revenue.quarter
+  AND cgs.name (+)       =revenue.name
+  AND cgs.ledger_name(+) =revenue.ledger_name
+  AND revenue.name       =opexp.name (+)
+  AND revenue.ledger_name=opexp.ledger_name(+)
+  order by 5;
+  
+  ------ Operating Margin
+  SELECT revenue.name "Company Name",
+  revenue.ledger_name "Ledger Name",
+  revenue.current_period_year"Current Period Year" ,
+  revenue.prior_period_year "Prior Period Year",revenue.quarter "Quarter",
+  ROUND(((NVL(Current_Revenue_Amount,0)-NVL(Current_CGS_Amount,0)-NVL(current_Expense_Amount,0)-NVL(current_dep_Amount,0)))/Current_Revenue_Amount,2) * 100 "Current Operating Margin",
+  ROUND(((NVL(Prior_Revenue_Amount,0)  -NVL(prior_CGS_Amount,0)-NVL(prior_Expense_Amount,0)-NVL(prior_dep_Amount,0)))/Prior_Revenue_Amount,2)*100 "Prior Operating Margin"
+FROM
+( SELECT a.name ,
+  a.ledger_name 
+  ,  a.period_year Current_period_year,b.period_year prior_period_year,
+  a.quarter ,
+   (a.current_revenue_amount),
+  (b.prior_revenue_amount) ,
+  ROUND((a.current_revenue_amount-b.prior_revenue_amount)/b.prior_revenue_amount,2)*100 "Change"
+FROM
+  (SELECT bal.period_year ,
+    NVL(gl.SHORT_NAME, '') Name,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    GL.NAME ledger_name,
+    SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) current_Revenue_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+--    GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name      =gp.period_set_name
+  AND gl.accounted_period_type=gp.period_type
+  AND gp.period_name          =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID = gl.CHART_OF_ACCOUNTS_ID --101
+  AND ( bal.CURRENCY_CODE     = gl.currency_code)       --'USD' )
+    -- AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='R'
+  AND segment3 LIKE '4%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  =:Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) a,
+  (SELECT bal.period_year ,
+    NVL(gl.SHORT_NAME, '') Name,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    GL.NAME ledger_name,
+    SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) prior_Revenue_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+--    GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name      =gp.period_set_name
+  AND gl.accounted_period_type=gp.period_type
+  AND gp.period_name          =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID = gl.CHART_OF_ACCOUNTS_ID --101
+  AND ( bal.CURRENCY_CODE     = gl.currency_code)       --'USD' )
+    -- AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='R'
+  AND segment3 LIKE '4%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  =:Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) b
+WHERE a.name     =b.name
+AND a.ledger_name=b.ledger_name
+AND a.quarter    =b.quarter
+  ) revenue,
+  (SELECT a.name,
+  a.ledger_name ,
+  a.period_year current_period_year,
+  b.period_year prior_period_year,
+  a.quarter ,
+  (a.current_cgs_amount) ,
+  (b.prior_cgs_amount) ,
+  ROUND((a.current_cgs_amount-b.prior_cgs_amount)/b.prior_cgs_amount,2)*100 "Change"
+FROM
+  (SELECT NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_cgs_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+   -- GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+  AND ( bal.CURRENCY_CODE       = gl.currency_code )
+    --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND segment3 LIKE '5%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) a,
+  (SELECT NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_cgs_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+  AND ( bal.CURRENCY_CODE       = gl.currency_code )
+    --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND segment3 LIKE '5%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  )b
+WHERE a.name     =b.name
+AND a.ledger_name=b.ledger_name
+AND a.quarter    =b.quarter
+  ) cgs,
+   (SELECT a.name ,
+    a.ledger_name ,
+    a.quarter,
+    a.period_year Current_Period_year,
+    b.period_year Prior_Period_year,
+    a.current_Expense_Amount,
+    b.prior_expense_amount ,
+    ROUND((a.current_Expense_Amount-b.prior_expense_amount)/b.prior_expense_amount,2)*100 Change
+  FROM
+    (SELECT NVL(gl.SHORT_NAME, '') Name,
+      GL.NAME ledger_name,
+      bal.PERIOD_year period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_Expense_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,
+      gl_sets_of_books gl,
+      --GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+    AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+    AND ( bal.CURRENCY_CODE       = gl.currency_code)
+      --AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='E'
+    AND ( (NVL(SEGMENT3,'')          >= '6001'
+    AND NVL(SEGMENT3,'')             <= '7230')
+    OR (NVL(SEGMENT3,'')             >= '7300'
+    AND NVL(SEGMENT3,'')             <= '7360')
+    OR (NVL(SEGMENT3,'')             >= '7410'
+    AND NVL(SEGMENT3,'')             <= '7998'))
+    AND ( (NVL(SEGMENT2,'')          >= '0'
+    AND NVL(SEGMENT2,'')             <= '850') )
+    AND ( (NVL(bal.period_year,'')    = :Current_Year
+    AND ( (bal.ACTUAL_FLAG            = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0)   != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)     != 0))))) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.PERIOD_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) a,
+        (SELECT NVL(gl.SHORT_NAME, '') Name,
+      GL.NAME ledger_name,
+      bal.PERIOD_year period_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+      SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_Expense_Amount
+    FROM GL_BALANCES bal,
+      GL_CODE_COMBINATIONS cc,
+      gl_sets_of_books gl,
+      --GL_LEDGERS gl,
+      gl_periods gp
+    WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+   AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+    AND gl.short_name             ='Vision Operations'
+    AND gp.period_type            =bal.period_type
+    AND gl.period_set_name        =gp.period_set_name
+    AND gl.accounted_period_type  =gp.period_type
+    AND gp.period_name            =bal.period_name
+    AND cc.CHART_OF_ACCOUNTS_ID   = gl.CHART_OF_ACCOUNTS_ID
+    AND ( bal.CURRENCY_CODE       = gl.currency_code )
+      --AND ( bal.LEDGER_ID               = 1 )
+    AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+    AND cc.TEMPLATE_ID               IS NULL
+    AND account_type                  ='E'
+    AND ( (NVL(SEGMENT3,'')          >= '6001'
+    AND NVL(SEGMENT3,'')             <= '7230')
+    OR (NVL(SEGMENT3,'')             >= '7300'
+    AND NVL(SEGMENT3,'')             <= '7360')
+    OR (NVL(SEGMENT3,'')             >= '7410'
+    AND NVL(SEGMENT3,'')             <= '7998'))
+    AND ( (NVL(SEGMENT2,'')          >= '0'
+    AND NVL(SEGMENT2,'')             <= '850') )
+    AND ((( (NVL(bal.period_year,'')  = :Current_Year-1
+    AND ( (bal.ACTUAL_FLAG            = 'A' )
+    OR ( (bal.ACTUAL_FLAG             = 'A'
+    AND ((NVL(bal.PERIOD_NET_DR,0)   != 0)
+    OR (NVL(bal.PERIOD_NET_CR,0)     != 0))))))) ) )
+    GROUP BY GL.name ,
+      gl.SHORT_NAME,
+      bal.PERIOD_year,
+      to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+    ) b
+  WHERE a.name     =b.name
+  AND a.ledger_name=b.ledger_name
+  and a.quarter=b.quarter
+  ) opexp,
+  (SELECT  a.name,
+  a.ledger_name ,
+  a.period_year current_period_year,
+  b.period_year prior_period_year,
+  a.quarter ,
+  (a.current_dep_Amount) ,
+  (b.prior_dep_Amount) ,
+  ROUND((a.current_dep_Amount-b.prior_dep_Amount)/b.prior_dep_Amount,2)*100 "Change"
+FROM
+  (SELECT
+    NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+   bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) current_dep_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,  
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID     = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+   AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID       = gl.CHART_OF_ACCOUNTS_ID 
+  AND ( bal.CURRENCY_CODE           = gl.currency_code)
+  --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+  AND (NVL(SEGMENT3,'')         like '73%')
+  AND ( (NVL(SEGMENT2,'')          >= '0'
+  AND NVL(SEGMENT2,'')             <= '850') )
+  AND ( (NVL(bal.period_year,'')  = :Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY
+    GL.name ,
+    gl.SHORT_NAME,
+    bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) a,
+  (
+  (SELECT 
+    NVL(gl.SHORT_NAME, '') Name,
+    GL.NAME ledger_name,
+    bal.PERIOD_year period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    SUM(NVL(bal.PERIOD_NET_dR, 0) - NVL(bal.PERIOD_NET_cR, 0)) prior_dep_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+    --GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID     = cc.CODE_COMBINATION_ID
+AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+   AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name        =gp.period_set_name
+  AND gl.accounted_period_type  =gp.period_type
+  AND gp.period_name            =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID       = gl.CHART_OF_ACCOUNTS_ID 
+  AND ( bal.CURRENCY_CODE           = gl.currency_code )
+  --AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='E'
+ AND (NVL(SEGMENT3,'')         like '73%')
+  AND ( (NVL(SEGMENT2,'')          >= '0'
+  AND NVL(SEGMENT2,'')             <= '850') )
+  AND ((( (NVL(bal.period_year,'')  = :Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A' )
+  OR ( (bal.ACTUAL_FLAG           = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))))) ) )
+  GROUP BY 
+    GL.name ,
+    gl.SHORT_NAME,
+  bal.PERIOD_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  )) b
+WHERE a.name     =b.name
+AND a.ledger_name=b.ledger_name
+AND a.quarter    =b.quarter
+  ) depreciation
+WHERE revenue.name     =depreciation.name(+)
+AND revenue.ledger_name=depreciation.ledger_name(+)
+AND cgs.name (+)       =revenue.name
+AND revenue.quarter    =depreciation.quarter
+  AND cgs.quarter        =opexp.quarter
+  AND cgs.quarter        =revenue.quarter
+AND cgs.ledger_name(+) =revenue.ledger_name
+AND revenue.name       =opexp.name (+)
+AND revenue.ledger_name=opexp.ledger_name(+);
+
+------------ Revenue
+
+SELECT a.name "Company Name",
+  a.ledger_name "Ledger Name"
+  ,  a.period_year "Current Year",b.period_year "Prior_year",
+  a.quarter "Quarter",
+   (a.current_revenue_amount) "Current Revenue Amount",
+  (b.prior_revenue_amount) "Prior Revenue Amount",
+  ROUND((a.current_revenue_amount-b.prior_revenue_amount)/b.prior_revenue_amount,2)*100 "Change"
+FROM
+  (SELECT bal.period_year ,
+    NVL(gl.SHORT_NAME, '') Name,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    GL.NAME ledger_name,
+    SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) current_Revenue_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+--    GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name      =gp.period_set_name
+  AND gl.accounted_period_type=gp.period_type
+  AND gp.period_name          =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID = gl.CHART_OF_ACCOUNTS_ID --101
+  AND ( bal.CURRENCY_CODE     = gl.currency_code)       --'USD' )
+    -- AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='R'
+  AND segment3 LIKE '4%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  =:Current_Year
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) a,
+  (SELECT bal.period_year ,
+    NVL(gl.SHORT_NAME, '') Name,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q')) quarter,
+    GL.NAME ledger_name,
+    SUM(NVL(bal.PERIOD_NET_CR, 0) - NVL(bal.PERIOD_NET_DR, 0)) prior_Revenue_Amount
+  FROM GL_BALANCES bal,
+    GL_CODE_COMBINATIONS cc,gl_sets_of_books gl,
+--    GL_LEDGERS gl,
+    gl_periods gp
+  WHERE bal.CODE_COMBINATION_ID = cc.CODE_COMBINATION_ID
+  AND bal.ledger_id  = gl.set_of_books_id  -- for release12
+  --AND bal.set_of_books_id  = gl.set_of_books_id --uncomment for 11i release
+  AND gl.short_name             ='Vision Operations'
+  AND gp.period_type            =bal.period_type
+  AND gl.period_set_name      =gp.period_set_name
+  AND gl.accounted_period_type=gp.period_type
+  AND gp.period_name          =bal.period_name
+  AND cc.CHART_OF_ACCOUNTS_ID = gl.CHART_OF_ACCOUNTS_ID --101
+  AND ( bal.CURRENCY_CODE     = gl.currency_code)       --'USD' )
+    -- AND ( bal.LEDGER_ID               = 1 )
+  AND NVL(bal.TRANSLATED_FLAG, 'x')IN ('Y','N','x')
+  AND cc.TEMPLATE_ID               IS NULL
+  AND account_type                  ='R'
+  AND segment3 LIKE '4%'
+  AND ( (NVL(SEGMENT2,'')        >= '0'
+  AND NVL(SEGMENT2,'')           <= '850') )
+  AND ( (NVL(bal.period_year,'')  =:Current_Year-1
+  AND ( (bal.ACTUAL_FLAG          = 'A'
+  AND ((NVL(bal.PERIOD_NET_DR,0) != 0)
+  OR (NVL(bal.PERIOD_NET_CR,0)   != 0))))) )
+  GROUP BY GL.name ,
+    gl.SHORT_NAME,
+    bal.period_year,
+    to_number(TO_CHAR(add_months( to_date( gp.start_date, 'dd-mon-rrrr'), 0 ),'Q'))
+  ) b
+WHERE a.name     =b.name
+AND a.ledger_name=b.ledger_name
+AND a.quarter    =b.quarter
+ORDER BY 5; 
